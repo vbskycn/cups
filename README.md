@@ -82,7 +82,7 @@ docker run -d \
   --privileged \
   -v /dev/bus/usb:/dev/bus/usb \
   -v /var/run/dbus:/var/run/dbus \
-  zhoujie218/cups:cups-1.0.1
+  zhoujie218/cups:cups-1.0.2
 ```
 
 **参数说明**：
