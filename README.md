@@ -25,10 +25,10 @@
 
 ```bash
 # 从 Docker Hub 拉取最新镜像
-docker pull your-dockerhub-username/cups:latest
+docker pull zhoujie218/cups:latest
 
 # 或拉取特定版本
-docker pull your-dockerhub-username/cups:1.0.0
+docker pull zhoujie218/cups:1.0.0
 ```
 
 ### 2. 本地构建镜像
@@ -52,18 +52,45 @@ docker-compose logs -f
 
 #### 使用 Docker 命令
 
+**完整版本（推荐）**：
 ```bash
-# 运行容器
+# 运行容器（包含数据持久化）
 docker run -d \
-  --name cups-server \
-  --restart unless-stopped \
-  --privileged \
+  --name cups \
+  --restart always \
   --network host \
+  --privileged \
   -v /dev/bus/usb:/dev/bus/usb \
   -v /var/run/dbus:/var/run/dbus \
-  -p 631:631 \
-  cups-arm64
+  -v cups-config:/etc/cups \
+  -v cups-spool:/var/spool/cups \
+  -v cups-cache:/var/cache/cups \
+  -v cups-log:/var/log/cups \
+  -e CUPS_USER=admin \
+  -e CUPS_PASS=admin \
+  zhoujie218/cups:latest
 ```
+
+**简化版本**：
+```bash
+docker stop cups
+docker rm cups
+docker run -d \
+  --name cups \
+  --restart always \
+  --network host \
+  --privileged \
+  -v /dev/bus/usb:/dev/bus/usb \
+  -v /var/run/dbus:/var/run/dbus \
+  zhoujie218/cups:cups-1.0.1
+```
+
+**参数说明**：
+- `--network host`: 使用主机网络，直接访问631端口
+- `--privileged`: 获取特权模式，访问USB设备
+- `-v /dev/bus/usb:/dev/bus/usb`: 映射USB设备
+- `-v /var/run/dbus:/var/run/dbus`: D-Bus系统总线通信
+- `-v cups-*`: 数据持久化卷（可选）
 
 ### 4. 访问管理界面
 
@@ -71,6 +98,47 @@ docker run -d \
 
 - 用户名：admin
 - 密码：admin
+
+### 5. 部署验证
+
+**检查容器状态**：
+```bash
+# 查看容器运行状态
+docker ps
+
+# 查看容器日志
+docker logs cups
+
+# 实时查看日志
+docker logs -f cups
+```
+
+**检查CUPS服务**：
+```bash
+# 测试CUPS服务
+curl http://localhost:631
+
+# 检查USB设备
+docker exec cups lsusb
+
+# 进入容器调试
+docker exec -it cups bash
+```
+
+**管理容器**：
+```bash
+# 停止容器
+docker stop cups
+
+# 启动容器
+docker start cups
+
+# 重启容器
+docker restart cups
+
+# 删除容器
+docker rm cups
+```
 
 ## 配置说明
 
@@ -121,41 +189,120 @@ docker run -d \
 
 ### 常见问题
 
-1. **打印机无法识别**
+1. **添加打印机时页面卡死**
    ```bash
-   # 检查 USB 设备
-   docker exec cups-server lsusb
+   # 检查 CUPS 服务状态
+   docker exec cups systemctl status cups
    
-   # 检查 CUPS 日志
-   docker exec cups-server tail -f /var/log/cups/error_log
+   # 查看 CUPS 错误日志
+   docker exec cups tail -f /var/log/cups/error_log
+   
+   # 检查 USB 设备权限
+   docker exec cups ls -la /dev/bus/usb/
+   
+   # 重启 CUPS 服务
+   docker exec cups systemctl restart cups
    ```
 
-2. **无法访问 Web 界面**
+2. **打印机无法识别**
+   ```bash
+   # 检查 USB 设备
+   docker exec cups lsusb
+   
+   # 检查设备权限
+   docker exec cups ls -la /dev/bus/usb/
+   
+   # 重新设置权限
+   docker exec cups chmod 666 /dev/bus/usb/*/*
+   ```
+
+3. **无法访问 Web 界面**
    ```bash
    # 检查容器状态
    docker ps
    
    # 检查端口占用
    netstat -tlnp | grep 631
+   
+   # 检查防火墙
+   ufw status
    ```
 
-3. **权限问题**
+4. **CUPS 服务启动失败**
    ```bash
-   # 重新设置 USB 设备权限
-   sudo chmod 666 /dev/bus/usb/*/*
+   # 查看容器日志
+   docker logs cups
+   
+   # 进入容器调试
+   docker exec -it cups bash
+   
+   # 手动启动 CUPS
+   docker exec cups /usr/sbin/cupsd -f
+   ```
+
+### CUPS 添加打印机卡死解决方案
+
+**问题现象**：在 CUPS Web 界面添加打印机时页面卡死，无法完成添加操作。
+
+**解决方案**：
+
+1. **检查 USB 设备权限**
+   ```bash
+   # 进入容器检查权限
+   docker exec -it cups bash
+   
+   # 检查 USB 设备
+   ls -la /dev/bus/usb/
+   
+   # 重新设置权限
+   chmod 666 /dev/bus/usb/*/*
+   chmod 666 /dev/usb/* 2>/dev/null || true
+   ```
+
+2. **重启 CUPS 服务**
+   ```bash
+   # 重启容器
+   docker restart cups
+   
+   # 或重启 CUPS 服务
+   docker exec cups systemctl restart cups
+   ```
+
+3. **检查 CUPS 配置**
+   ```bash
+   # 查看 CUPS 配置
+   docker exec cups cat /etc/cups/cupsd.conf | grep -E "(Timeout|Browse)"
+   
+   # 检查日志级别
+   docker exec cups grep "LogLevel" /etc/cups/cupsd.conf
+   ```
+
+4. **使用命令行添加打印机**
+   ```bash
+   # 进入容器
+   docker exec -it cups bash
+   
+   # 列出可用设备
+   lpinfo -v
+   
+   # 添加打印机（替换为实际设备URI）
+   lpadmin -p HP-P1108 -E -v usb://HP/LaserJet%20P1108
    ```
 
 ### 日志查看
 
 ```bash
 # CUPS 错误日志
-docker exec cups-server tail -f /var/log/cups/error_log
+docker exec cups tail -f /var/log/cups/error_log
 
 # CUPS 访问日志
-docker exec cups-server tail -f /var/log/cups/access_log
+docker exec cups tail -f /var/log/cups/access_log
 
 # 容器日志
-docker logs cups-server
+docker logs cups
+
+# 实时查看所有日志
+docker logs -f cups
 ```
 
 ## CI/CD 和版本管理
@@ -174,7 +321,7 @@ docker logs cups-server
 - 镜像会自动打上版本标签和 `latest` 标签
 
 **Docker Hub 发布**：
-- 镜像名称：`your-dockerhub-username/cups`
+- 镜像名称：`zhoujie218/cups`
 - 版本标签：`1.0.0`、`latest`、`cups-1.0.0`
 - 平台：`linux/arm64`
 
