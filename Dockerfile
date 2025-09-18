@@ -6,48 +6,47 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV CUPS_USER=admin
 ENV CUPS_PASS=admin
 
-# 更新包列表并安装必要的包
-RUN apt-get update && \
-    apt-get install -y \
-    # CUPS 核心包
+# 更新包列表（分层缓存优化）
+RUN apt-get update
+
+# 安装 CUPS 核心包（第一层缓存）
+RUN apt-get install -y --no-install-recommends \
     cups \
     cups-client \
     cups-bsd \
     cups-common \
     cups-daemon \
     cups-ppdc \
-    cups-server-common \
-    # HP 打印机驱动
+    cups-server-common
+
+# 安装 HP 打印机驱动（第二层缓存）
+RUN apt-get install -y --no-install-recommends \
     hplip \
-    hplip-gui \
-    # USB 支持包
+    hplip-gui
+
+# 安装 USB 支持包（第三层缓存）
+RUN apt-get install -y --no-install-recommends \
     usbutils \
     libusb-1.0-0 \
-    libusb-1.0-0-dev \
-    # 网络和系统工具
+    libusb-1.0-0-dev
+
+# 安装网络和系统工具（第四层缓存）
+RUN apt-get install -y --no-install-recommends \
     net-tools \
     iputils-ping \
     curl \
     wget \
-    # 权限管理
-    acl \
-    # 清理缓存
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+    acl
 
-# 创建必要的目录
-RUN mkdir -p /var/log/cups \
-    && mkdir -p /var/cache/cups \
-    && mkdir -p /var/spool/cups
+# 清理 APT 缓存（减少镜像大小）
+RUN apt-get clean && \
+    rm -rf /var/lib/apt/lists/* && \
+    rm -rf /var/cache/apt/archives/*
 
-# 设置权限
-RUN chown -R root:lp /etc/cups \
-    && chown -R root:lp /var/log/cups \
-    && chown -R root:lp /var/cache/cups \
-    && chown -R root:lp /var/spool/cups
-
-# 添加用户到 lpadmin 组
-RUN usermod -aG lpadmin root
+# 创建必要的目录并设置权限（合并优化）
+RUN mkdir -p /var/log/cups /var/cache/cups /var/spool/cups && \
+    chown -R root:lp /etc/cups /var/log/cups /var/cache/cups /var/spool/cups && \
+    usermod -aG lpadmin root
 
 # 复制 CUPS 配置文件
 COPY cupsd.conf /etc/cups/cupsd.conf

@@ -61,8 +61,14 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: |
+            type=gha
+            type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/${{ steps.config.outputs.name }}:buildcache
+          cache-to: |
+            type=gha,mode=max
+            type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/${{ steps.config.outputs.name }}:buildcache,mode=max
+          build-args: |
+            BUILDKIT_INLINE_CACHE=1
 
       - name: Build Summary
         run: |
@@ -72,3 +78,9 @@ jobs:
           echo "- **Platform**: linux/arm64" >> $GITHUB_STEP_SUMMARY
           echo "- **Registry**: Docker Hub" >> $GITHUB_STEP_SUMMARY
           echo "- **Tags**: ${{ steps.meta.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## ⚡ Build Optimizations" >> $GITHUB_STEP_SUMMARY
+          echo "- **Layer Cache**: 分层缓存优化" >> $GITHUB_STEP_SUMMARY
+          echo "- **Build Cache**: GitHub Actions + Registry 缓存" >> $GITHUB_STEP_SUMMARY
+          echo "- **Context**: .dockerignore 减少构建上下文" >> $GITHUB_STEP_SUMMARY
+          echo "- **No Recommends**: 禁用推荐包安装" >> $GITHUB_STEP_SUMMARY
