@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  cups:
+    build: .
+    container_name: cups-server
+    restart: unless-stopped
+    privileged: true
+    network_mode: host
+    volumes:
+      # USB 设备映射
+      - /dev/bus/usb:/dev/bus/usb
+      # D-Bus 系统总线
+      - /var/run/dbus:/var/run/dbus
+      # CUPS 配置持久化
+      - cups-config:/etc/cups
+      - cups-spool:/var/spool/cups
+      - cups-cache:/var/cache/cups
+      - cups-log:/var/log/cups
+    environment:
+      - CUPS_USER=admin
+      - CUPS_PASS=admin
+    devices:
+      # USB 设备访问
+      - /dev/bus/usb:/dev/bus/usb
+    ports:
+      - "631:631"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:631"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  cups-config:
+    driver: local
+  cups-spool:
+    driver: local
+  cups-cache:
+    driver: local
+  cups-log:
+    driver: local
